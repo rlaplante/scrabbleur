@@ -29,3 +29,10 @@ we maybe send the image of the resulting board in the email (We get fancy)
 
 
 
+If we need OCR we can use Tess4J
+example https://www.geeksforgeeks.org/tesseract-ocr-with-java-with-examples/
+
+USED this to crop: https://javapointers.com/java/java-core/crop-image-java/
+
+Used ChatGPT to get the algorithm of finding if we can put a word in the board
+

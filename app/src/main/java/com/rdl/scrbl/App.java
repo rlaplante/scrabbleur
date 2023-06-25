@@ -3,26 +3,43 @@
  */
 package com.rdl.scrbl;
 
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-//import net.sourceforge.tess4j.ITesseract;
-//import net.sourceforge.tess4j.Tesseract;
-//import net.sourceforge.tess4j.TesseractException;
+
 import java.io.File;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import net.sourceforge.tess4j.Tesseract;
+import net.sourceforge.tess4j.ITesseract;
+import net.sourceforge.tess4j.TesseractException;
+
+        
+
 public class App {
+
+    private static final int BOARD_SIZE = 15;
+    private static final char BLANK_TILE = '_'; // Placeholder for a blank tile
+    
+
     public String getGreeting() {
+
+
         return "Hello World!";
     }
 
     public static void main(String[] args) {
+
+        
+        char[][] board = new char[BOARD_SIZE][BOARD_SIZE];
+
         System.out.println(new App().getGreeting());
         //remove unnessasary from the imege
         String basePath = "C:/dev/scrabbleur/images/";
         String imagePath = basePath + "Image001.png";
         String croppedImagePath  = basePath + "Cropped001.png";
+        String croppedBWImagePath  = basePath + "CroppedBW001.png";
         //File imageFile = new File("C:/Javapointers/image.jpg");
 
         BufferedImage bufferedImage = null;
@@ -34,17 +51,73 @@ public class App {
             System.err.println("error reading the imae file: ex:" + ioEx);
         }
 
+        int nbLettersMax = (BOARD_SIZE * BOARD_SIZE);
+        LetterHolder[] letterList =  new LetterHolder[nbLettersMax];
+
+
+
         if (bufferedImage != null){
 
             //at x=   32 y=128
             //  at x=630 y=727
             //       598 599
-            BufferedImage imageCropped = cropImage(bufferedImage, 32,128,598,599);
+            BufferedImage imageCropped = cropImage(bufferedImage, 31,127,600,600);
+
+            //Create all char 
+            //cut the grid into all pieces
+            int currentChar = 0;
+            for(int y=0;y<BOARD_SIZE;y++){
+                for(int x=0;x<BOARD_SIZE;x++){
+                    String textStr =("Processing grid position:" + x + " y:" + y + " ");
+
+                    //first process the chunk of the grid
+                    //detect what it is.
+                    //if it's a character, create an item in our list of characters in the board
+
+                    //for now, put every chunk in the array list
+                    int xSize = 40;
+                    int ySize = 40;
+                    int xLoc = (x*xSize);
+                    int yLoc = (y*ySize);
+                    int widthChunk = 40;
+                    int heightChunk = 40;
+
+                    BufferedImage imageChunk = cropImage(imageCropped, xLoc , yLoc, widthChunk, heightChunk);                   
+                    BufferedImage imageChunkSmaller = cropImage(imageChunk, 0 , 0, 40, 28);                   
+                    System.out.println("processing : [" + x + "," + y +"]  posXY:" + xLoc + "," +  yLoc + "  Width:" + widthChunk + " height:" + heightChunk + ""  );
+
+                    //Doing black and white image if needed (But it's not working well with blue characters)
+                    BufferedImage imageChunkBW = toBinaryImage(imageChunk);
+
+                    String resOCR = getStringFromBufferedImage(imageChunkSmaller,"");
+                    if (resOCR.length() == 1){
+                        letterList[currentChar] = new LetterHolder(x,y,imageChunkSmaller, resOCR.charAt(0));
+                        board[x][y] = resOCR.charAt(0);                        
+                    } else {
+                        //EMPTY tile
+                        letterList[currentChar] = new LetterHolder(x,y,imageChunkSmaller);
+                        board[x][y] = '-';                        
+                    }
+                    
+                    currentChar++;
+
+                    System.out.println(textStr);
+
+                }
+            }
+
+            BufferedImage imageBW = toBinaryImage(imageCropped);
             //here we write back the image
             File pathFile = new File(croppedImagePath);
+            File pathFileBW = new File(croppedBWImagePath);
             boolean successWrite =false;
             try {
                 successWrite  = ImageIO.write(imageCropped,"png", pathFile);                
+                successWrite  = ImageIO.write(imageBW,"png", pathFileBW);                
+                for(int z=0;z < nbLettersMax;z++){
+                    File fileChunk = new File(basePath + "" + z + "[" + letterList[z].xPos + "-" + letterList[z].yPos +"].png");
+                    successWrite  = ImageIO.write(letterList[z].imageBin,"png", fileChunk);                
+                }
             }
             catch(IOException ioex){
                 System.err.println("could not writ ethe resulting image");    
@@ -66,6 +139,9 @@ public class App {
 
         //maybe image recognigtion it too much, just maybe 
 
+        board[5][5] = '?';
+        displayBoard(board);
+
     }
 
 
@@ -83,4 +159,59 @@ public class App {
         return croppedImage;
     }
 
+
+    public static BufferedImage toBinaryImage(final BufferedImage image) {
+        final BufferedImage blackAndWhiteImage = new BufferedImage(
+                image.getWidth(null), 
+                image.getHeight(null), 
+                BufferedImage.TYPE_BYTE_BINARY);
+        final Graphics2D g = (Graphics2D) blackAndWhiteImage.getGraphics();
+        g.drawImage(image, 0, 0, null);
+        g.dispose();
+        return blackAndWhiteImage;
+    }
+
+    static String getStringFromBufferedImage(BufferedImage inputImage,String something){
+
+        String result ="n/a";
+
+        Tesseract tesseract = new Tesseract();
+        try {
+  
+            tesseract.setDatapath("C:/dev/scrabbleur/images/");
+  
+            // the path of your tess data folder
+            // inside the extracted file
+            //String textOCR = tesseract.doOCR(new File("C:/dev/scrabbleur/images/ocr_file.png"));
+            //String textOCR = tesseract.doOCR(new File("C:/dev/scrabbleur/images/154.png"));
+            String textOCR = tesseract.doOCR(inputImage);
+
+  
+            // path of your image file
+            System.out.print("HERE IS THE TEXT:" + textOCR);
+            result = textOCR;
+        }
+        catch (TesseractException e) {
+            e.printStackTrace();
+            System.err.println("exception while tesserac:" + e);
+
+        }
+
+
+        return  result;
+    }
+
+    public static void displayBoard(char[][] board){
+        System.out.println("Board lenght:" + board.length);
+        System.out.println("Board width:" + board[0].length);
+        System.out.println("-------------------------------------");
+        for (int y=0;y<BOARD_SIZE;y++){
+            for (int x=0;x<BOARD_SIZE;x++){
+                System.out.print("[ " + board[x][y] + " ]");
+            }
+            System.out.print('\n');
+        }
+        System.out.println("-------------------------------------");
+
+    }
 }
