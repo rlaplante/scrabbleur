@@ -4,15 +4,15 @@
 package com.rdl.scrbl;
 
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.image.BufferedImage;
-
+import java.awt.image.RasterFormatException;
 import java.io.File;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
 import net.sourceforge.tess4j.Tesseract;
-import net.sourceforge.tess4j.ITesseract;
 import net.sourceforge.tess4j.TesseractException;
 
         
@@ -37,15 +37,20 @@ public class App {
         System.out.println(new App().getGreeting());
         //remove unnessasary from the imege
         String basePath = "C:/dev/scrabbleur/images/";
-        String imagePath = basePath + "Image001.png";
+        //String imagePath = basePath + "Image001.png"; //the original
+        String imagePath = basePath + "Image(1).png"; //second board with VOULOIR
+        //String imagePath = basePath + "Image003inverted.png";
+        //String imagePath = basePath + "Image005somethingGaussBlur.png";
+        //String imagePath = basePath + "Image006GaussBlur.png";
         String croppedImagePath  = basePath + "Cropped001.png";
         String croppedBWImagePath  = basePath + "CroppedBW001.png";
         //File imageFile = new File("C:/Javapointers/image.jpg");
 
         BufferedImage bufferedImage = null;
+        //Getting the main image
         try {
             File imageFile = new File(imagePath);
-             bufferedImage = ImageIO.read(imageFile);
+            bufferedImage = ImageIO.read(imageFile);
         }
         catch(IOException ioEx){
             System.err.println("error reading the imae file: ex:" + ioEx);
@@ -55,15 +60,21 @@ public class App {
         LetterHolder[] letterList =  new LetterHolder[nbLettersMax];
 
 
-
+        //We have a valid image
         if (bufferedImage != null){
 
             //at x=   32 y=128
             //  at x=630 y=727
             //       598 599
+            //Just getting the BOARD for the current state
             BufferedImage imageCropped = cropImage(bufferedImage, 31,127,600,600);
 
-            //Create all char 
+            BufferedImage lettersInHandImg = cropImage(bufferedImage, 30, 752, 603 , 82); //1 letter would be W82
+            //Pos 30,752  (width up to 766w , 833h)   W 30to112 = 82 ...H 752to834= 81... Real Width = 633-30 = 603
+            String handFile = basePath + "/hand.png";
+            boolean writtenHand = writeImageToFile(lettersInHandImg, handFile);
+
+            //Create all char
             //cut the grid into all pieces
             int currentChar = 0;
             for(int y=0;y<BOARD_SIZE;y++){
@@ -75,32 +86,72 @@ public class App {
                     //if it's a character, create an item in our list of characters in the board
 
                     //for now, put every chunk in the array list
-                    int xSize = 40;
-                    int ySize = 40;
+                    int xSize = 40;// Size of Tile in the image width
+                    int ySize = 40;// Size of Tile in the image height
                     int xLoc = (x*xSize);
                     int yLoc = (y*ySize);
-                    int widthChunk = 40;
-                    int heightChunk = 40;
+                    int widthChunk = 30;
+                    int heightChunk = 30;
+                    int cropBottom = 6;
+                    int cropTop =  3;
+                    
+                    BufferedImage imageChunk = cropImage(imageCropped, xLoc , yLoc, xSize, ySize);
+                    BufferedImage imageChunkSmaller = cropImage(imageChunk, ((xSize-widthChunk)/2) , ((ySize-heightChunk)/2), widthChunk, heightChunk); //28h was good... but missing some
+                    BufferedImage imageChunkNoBottom = cropImage(imageChunkSmaller, 0 , 0, imageChunkSmaller.getWidth(), imageChunkSmaller.getHeight()-cropBottom); //28h was good... but missing some
+                    BufferedImage imageChunkNoBottomNoTop = cropImage(imageChunkNoBottom, 0 , cropTop, imageChunkNoBottom.getWidth(), imageChunkNoBottom.getHeight()); //28h was good... but missing some
 
-                    BufferedImage imageChunk = cropImage(imageCropped, xLoc , yLoc, widthChunk, heightChunk);                   
-                    BufferedImage imageChunkSmaller = cropImage(imageChunk, 0 , 0, 40, 28);                   
-                    System.out.println("processing : [" + x + "," + y +"]  posXY:" + xLoc + "," +  yLoc + "  Width:" + widthChunk + " height:" + heightChunk + ""  );
+                    
+                    //BufferedImage newBufImg = new BufferedImage(100,100,imageChunkNoBottomNoTop.getType());//imageChunkNoBottomNoTop.getColorModel(), imageChunkNoBottomNoTop.getRaster());
+                    //newBufImg.setData(imageChunkNoBottomNoTop.getRaster());
+                    //get pixel of the background
+                     int firstPixel = imageChunkNoBottomNoTop.getRGB(0, 0);
+                     //newBufImg.setRGB(0, 0, firstPixel);
+                     BufferedImage newBufImg = makeEmptyImage(imageChunkNoBottomNoTop,100,100);
+
+                     
+                    
+                    writeImageToFile(newBufImg, "c:/dev/scrabbleur/images/newImage_"+ x +"_" + y +".png");
+                    //Here take the color of the first pixel (almost never the letter) and fill a new image with it
+
+
+
 
                     //Doing black and white image if needed (But it's not working well with blue characters)
-                    BufferedImage imageChunkBW = toBinaryImage(imageChunk);
+                    //BufferedImage imageChunkBW = toBinaryImage(imageChunkSmaller);
+                    //REMOVE Scrabble numerical value on Tile or more (the surrounding of the tile)
+                    //BufferedImage imageChunkBWNoNumbers = removeNumericalValue(imageChunkSmaller, true,false);
+                    //BufferedImage imageChunkBWNoNumbers = removeNumericalValue(imageChunkBW, false, false);
+                    
+                    //BufferedImage imageChunkBWNoNumbers = removeNumericalValue(imageChunkBW, false, false, widthChunk, heightChunk);
+                    //BufferedImage imageChunkColorNoNumber = removeNumericalValue(imageChunkSmaller, true, false, widthChunk, heightChunk);
+                    //BufferedImage imageChunkBigColorNoNumber = removeNumericalValue(imageChunk, true, false, widthChunk, heightChunk);
 
-                    String resOCR = getStringFromBufferedImage(imageChunkSmaller,"");
+                    BufferedImage imageToUse = imageChunkNoBottomNoTop;
+                    System.out.println("processing : [" + x + "," + y +"]  posXY:" + xLoc + "," +  yLoc + "  Width:" + widthChunk + " height:" + heightChunk + ""  );
+
+
+                    BufferedImage imageToUseResized = imageToUse; //resize(imageToUse, 200, 200);//just expending the size for better detection
+                    
+                    //the actual Character Recognition.
+                    String resOCR = getStringFromBufferedImage(imageToUseResized,"");
+                    //cleaning
+                    resOCR = resOCR.trim();
+                    if (resOCR.equalsIgnoreCase("n/a")){
+                        resOCR = "";
+                    }
+                    System.out.println("length of the OCR String:" + resOCR.length());
+                    for(int i=0;i < resOCR.length(); i++){
+                        System.out.println("[" + i + "]:" + resOCR.charAt(i));
+                    }
                     if (resOCR.length() == 1){
-                        letterList[currentChar] = new LetterHolder(x,y,imageChunkSmaller, resOCR.charAt(0));
-                        board[x][y] = resOCR.charAt(0);                        
+                        letterList[currentChar] = new LetterHolder(x,y,imageToUse, resOCR.charAt(0));
+                        board[x][y] = resOCR.charAt(0);
                     } else {
                         //EMPTY tile
-                        letterList[currentChar] = new LetterHolder(x,y,imageChunkSmaller);
-                        board[x][y] = '-';                        
+                        letterList[currentChar] = new LetterHolder(x,y,imageToUse);
+                        board[x][y] = ' ';
                     }
-                    
                     currentChar++;
-
                     System.out.println(textStr);
 
                 }
@@ -112,20 +163,20 @@ public class App {
             File pathFileBW = new File(croppedBWImagePath);
             boolean successWrite =false;
             try {
-                successWrite  = ImageIO.write(imageCropped,"png", pathFile);                
-                successWrite  = ImageIO.write(imageBW,"png", pathFileBW);                
+                successWrite  = ImageIO.write(imageCropped,"png", pathFile);
+                successWrite  = ImageIO.write(imageBW,"png", pathFileBW);
                 for(int z=0;z < nbLettersMax;z++){
                     File fileChunk = new File(basePath + "" + z + "[" + letterList[z].xPos + "-" + letterList[z].yPos +"].png");
-                    successWrite  = ImageIO.write(letterList[z].imageBin,"png", fileChunk);                
+                    BufferedImage imageToUseResized = letterList[z].imageBin;//resize(letterList[z].imageBin, 200, 200);
+                    successWrite  = ImageIO.write(imageToUseResized,"png", fileChunk);
                 }
             }
             catch(IOException ioex){
-                System.err.println("could not writ ethe resulting image");    
+                System.err.println("could not write the resulting image");
             }
 
             if (successWrite) {
-                System.out.println("done th e croppped image");
-
+                System.out.println("done writing the files");
             }
 
         } else {
@@ -137,9 +188,9 @@ public class App {
          //ITesseract tesseract = new Tesseract();
 
 
-        //maybe image recognigtion it too much, just maybe 
+        //maybe image recognigtion it too much, just maybe
 
-        board[5][5] = '?';
+        //board[0][6] = '?';// just to test the board and board display
         displayBoard(board);
 
     }
@@ -155,11 +206,29 @@ public class App {
      * @return the image that was cropped.
      */
     public static BufferedImage cropImage(BufferedImage bufferedImage, int x, int y, int width, int height){
-        BufferedImage croppedImage = bufferedImage.getSubimage(x, y, width, height);
+        BufferedImage croppedImage = bufferedImage;
+        try {
+            croppedImage = bufferedImage.getSubimage(x, y, width, height);
+            System.out.println("crop Worked");
+        }
+        catch(RasterFormatException rFEx){
+            int actualWidth = -1;
+            int actualHeight = -1;
+            if (bufferedImage != null){
+                actualWidth = bufferedImage.getWidth();
+                actualHeight = bufferedImage.getHeight();
+            }
+            System.err.println("Exception while cutting image sized W:" + actualWidth+ " H:" + actualHeight + " x=" + x + " y=" + y + " width=" + width + " height=" + height + " Exception:" + rFEx);
+        }
         return croppedImage;
     }
 
 
+    /**
+     * 
+     * @param image
+     * @return
+     */
     public static BufferedImage toBinaryImage(final BufferedImage image) {
         final BufferedImage blackAndWhiteImage = new BufferedImage(
                 image.getWidth(null), 
@@ -171,47 +240,276 @@ public class App {
         return blackAndWhiteImage;
     }
 
+    /**
+     * 
+     * @param inputImage
+     * @param something
+     * @return
+     */
     static String getStringFromBufferedImage(BufferedImage inputImage,String something){
 
         String result ="n/a";
 
         Tesseract tesseract = new Tesseract();
         try {
-  
+
+            //This seems important.
+            //TODO: make it a parameter
             tesseract.setDatapath("C:/dev/scrabbleur/images/");
-  
-            // the path of your tess data folder
-            // inside the extracted file
-            //String textOCR = tesseract.doOCR(new File("C:/dev/scrabbleur/images/ocr_file.png"));
-            //String textOCR = tesseract.doOCR(new File("C:/dev/scrabbleur/images/154.png"));
+
             String textOCR = tesseract.doOCR(inputImage);
 
-  
             // path of your image file
-            System.out.print("HERE IS THE TEXT:" + textOCR);
-            result = textOCR;
+            System.out.println("HERE IS THE TEXT:" + textOCR);
+            
+            
+            char[] arrayTextOCR = textOCR.toCharArray();
+            if (textOCR.length()>0){
+                result = ""; //just removing the n/a to prepare for valid characters
+            }
+            for (int x = 0;x<arrayTextOCR.length;x++){
+                    
+                    // only valid characters in this SCRABBLE thing  CAPITALS A to Z
+                    if (arrayTextOCR[x] >= 'A' && arrayTextOCR[x] <='Z'){
+                        //good char
+                        result = result + arrayTextOCR[x];
+                    }
+            }
         }
         catch (TesseractException e) {
             e.printStackTrace();
             System.err.println("exception while tesserac:" + e);
-
         }
-
-
+        
         return  result;
     }
 
+    //This will work with B&W image ... for now
+    /**
+     * 
+     * @param inputImage
+     * @param isColor
+     * @param isInverted
+     * @param imgWidth
+     * @param imgHeight
+     * @return
+     */
+    public static BufferedImage removeNumericalValue(BufferedImage inputImage, boolean isColor, boolean isInverted, int imgWidth, int imgHeight){
+        //When a 40x40 picture
+        //ERASE
+        //x=25 up to 35
+        //y=28 up yo 37
+        int r = 255;// red component 0...255
+        int g = 255;// green component 0...255
+        int b = 255;// blue component 0...255
+        int a = 0;// alpha (transparency) component 0...255
+        if (isInverted && !isColor){
+            System.out.println("BW Inverted");
+            r=0;
+            g=0;
+            b=0;
+        }
+
+        if(!isInverted && isColor){ //Not quite the best color
+            System.out.println("Color Not-Inverted");
+            //TODO: here we should get the  same color as surronding color because the tile can be yellow, beige or dark beige or even a bit beige-green
+            r = 238;
+            g= 233; 
+            b= 196;
+        }
+        if(isInverted && isColor){ //Not quite the best color
+            System.out.println("Color Inverted !!!! WARNING THUIS IS NOT SETUP");
+            r = 238;
+            g= 233; 
+            b= 196;
+        }
+
+        int col = (a << 24) | (r << 16) | (g << 8) | b;
+
+        //This delete everything bottom right... but
+        /*
+        for(int y=28;y<=39;y++){
+            for(int x=25;x<=39;x++){
+                inputImage.setRGB(x, y, col);
+            }
+        }
+        */
+
+        for(int y=0;y<=imgHeight-1;y++){
+            for(int x=0;x<=imgWidth-1;x++){
+                //if (((x<12) || (x>30)) && ((y<7) || (y>28))){   //square x=12, x=30, y=7 , y=28
+                if ((x<12) || (x>30) || (y<7) || (y>28)){   //square x=12, x=30, y=7 , y=28
+                    inputImage.setRGB(x, y, col);
+                }
+            }
+        }
+        
+        return inputImage;
+
+
+    }
+
+    /**
+     * 
+     * @param board
+     */
     public static void displayBoard(char[][] board){
         System.out.println("Board lenght:" + board.length);
         System.out.println("Board width:" + board[0].length);
         System.out.println("-------------------------------------");
         for (int y=0;y<BOARD_SIZE;y++){
             for (int x=0;x<BOARD_SIZE;x++){
-                System.out.print("[ " + board[x][y] + " ]");
+                System.out.print("[" + board[x][y] + "]");
+                /*
+                if (board[x][y] != '-') {
+                    System.err.print("[" + board[x][y] + "]");
+                } else {
+                    System.out.print("[" + board[x][y] + "]");
+                }
+                */
             }
             System.out.print('\n');
         }
         System.out.println("-------------------------------------");
+    }
 
+    
+    /**
+     * 
+     * * FROM https://stackoverflow.com/questions/9417356/bufferedimage-resize
+     * @param img
+     * @param newW
+     * @param newH
+     * @return
+     */
+    public static BufferedImage resize(BufferedImage img, int newW, int newH) { 
+        Image tmp = img.getScaledInstance(newW, newH, Image.SCALE_SMOOTH);
+        BufferedImage dimg = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_ARGB);
+
+        Graphics2D g2d = dimg.createGraphics();
+        g2d.drawImage(tmp, 0, 0, null);
+        g2d.dispose();
+
+        return dimg;
+    }  
+
+
+    /**
+     * taken from https://stackoverflow.com/questions/9131678/convert-a-rgb-image-to-grayscale-image-reducing-the-memory-in-java
+     * 
+     * @param img
+     * @return
+     */
+    public static BufferedImage makeGray(BufferedImage img){
+        //BufferedImage grayImage = img;
+        
+        for (int x = 0; x < img.getWidth(); ++x)
+            for (int y = 0; y < img.getHeight(); ++y){
+                int rgb = img.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = (rgb & 0xFF);
+
+                // Normalize and gamma correct:
+                float rr = (float) Math.pow(r / 255.0, 2.2);
+                float gg = (float) Math.pow(g / 255.0, 2.2);
+                float bb = (float) Math.pow(b / 255.0, 2.2);
+
+                // Calculate luminance:
+                float lum = (float) (0.2126 * rr + 0.7152 * gg + 0.0722 * bb);
+
+                // Gamma compand and rescale to byte range:
+                int grayLevel = (int) (255.0 * Math.pow(lum, 1.0 / 2.2));
+                int gray = (grayLevel << 16) + (grayLevel << 8) + grayLevel; 
+                img.setRGB(x, y, gray);
+        }
+        return img;
+    }
+
+    /**
+     * 
+     * @param img
+     * @param filenameAndPath
+     * @return
+     */
+    static boolean writeImageToFile(BufferedImage img, String filenameAndPath){
+        boolean successWritten = false;
+        try {
+            File imageFile = new File(filenameAndPath);                        
+            successWritten  = ImageIO.write(img,"png", imageFile);            
+        }
+        catch(Exception ex){
+            System.err.println("Error while writing file" + filenameAndPath +   "  ex:" +  ex);
+            successWritten = false;
+        }
+        return successWritten;
+    }
+
+    /**
+     * 
+     * @param bi
+     * @return
+     */
+    public static BufferedImage makeEmptyImage(BufferedImage bi,int width, int height) {
+        //was deepCopy... but not anymore
+        /* 
+        ColorModel cm = bi.getColorModel();
+         String[] propNames = bi.getPropertyNames();
+         Properties  finalProps = new Properties();
+
+         if(propNames!=null){
+            for(int curProp=0;curProp<propNames.length;curProp++){
+                System.out.println("prop for W:" + width +  "| height:" + height + "Prop[]" + propNames[curProp] + "]");
+                Object curPropValue = bi.getProperty(propNames[curProp]);
+
+                finalProps.put(propNames[curProp], curPropValue);
+            }
+        } else {
+            System.out.println("prop for W:" + width +  "| height:" + height +" HAS NULL PROPERTIES");
+        }
+
+        boolean isAlphaPremultiplied = cm.isAlphaPremultiplied();
+        WritableRaster raster = bi.copyData(bi.getRaster().createCompatibleWritableRaster());
+        BufferedImage finalImage = new BufferedImage(cm, raster, isAlphaPremultiplied, null);
+        */
+//        BufferedImage finalImage = new BufferedImage( width,  height, bi.getType(), bi.getColorModel());
+        //BufferedImage finalImage = new BufferedImage()
+        //IndexColorModel cm =  (IndexColorModel) bi.getColorModel();//new IndexColorModel(bits, size, bytesMap, start, hasAlpha);
+        //bi.getColorModel()
+        int newW = 200;
+        int newH = 200;
+        int imageType = bi.getType();
+        int biWidth = bi.getWidth();
+        int biHeight = bi.getHeight();
+        int middleNewWidth =  newW /2;
+        int middleNewHeight =  newH /2;
+        int middleBiWidth =  biWidth/2;
+        int middleBiHeight =  biHeight/2;
+
+        
+
+        BufferedImage finalImage = new BufferedImage(   biWidth, biHeight, imageType);
+        int color = bi.getRGB(0, 0);
+        finalImage = resize(finalImage, newW,newH);
+
+        //recoloring the new temp image prior to copy
+        for (int y=0;y<newH;y++){
+            for (int x=0;x<newW;x++){
+                finalImage.setRGB(x, y, color);
+            }            
+        }
+        //recopy the original image on top (Not optimal because we already have a loop that navigates all pixels... but just for now)
+        for (int y=0;y<biHeight;y++){
+            for (int x=0;x<biWidth;x++){
+                int currentPix =  bi.getRGB(x, y);
+                finalImage.setRGB(x+((newW - biWidth)/2), y+((newH - biHeight)/2), currentPix); //80 is (NewW - biW) /2  .... and  similar for y
+            }
+        }
+        
+
+        return  finalImage;
     }
 }
+
+
+
